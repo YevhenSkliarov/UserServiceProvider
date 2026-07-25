@@ -54,9 +54,9 @@ pipeline {
         // Consumed by docker-compose.yml's postgres/pact-broker services.
         // Only reachable from inside the broker's own docker network, so
         // not treated as a secret like the PACT_BROKER_* creds above.
-        POSTGRES_DB = 'pact_broker'
-        POSTGRES_USER = 'pact_broker'
-        POSTGRES_PASSWORD = 'pact_broker'
+        POSTGRES_DB = credentials('postgres-db')
+        POSTGRES_USER = credentials('postgres-user')
+        POSTGRES_PASSWORD = credentials('postgres-password')
 
         // Overrides Jenkins' auto-populated GIT_COMMIT (a full 40-char SHA)
         // with the short SHA, so the version recorded here matches the one
