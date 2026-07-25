@@ -37,7 +37,7 @@ pipeline {
     // the UserWebClient Jenkinsfile. Uses polling rather than a GitHub
     // webhook since this Jenkins isn't reachable from the public internet.
     triggers {
-        pollSCM('H/5 * * * *')
+        pollSCM('* * * * *')
     }
 
     options {
