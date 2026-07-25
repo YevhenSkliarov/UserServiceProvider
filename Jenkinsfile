@@ -12,7 +12,16 @@
 // whatever is currently on the broker.
 pipeline {
     agent {
-        docker { image 'node:20-bullseye' }
+        docker {
+            image 'node:20-bullseye'
+            // Socket mount lets this container drive the host's Docker
+            // daemon to start docker-compose.yml's Pact Broker (see the
+            // "Start Pact Broker" stage below). --network host puts the
+            // container on the host's network so it can then reach that
+            // broker at localhost:9292 — Linux Docker hosts only, since
+            // host networking isn't supported on Docker Desktop.
+            args '-v /var/run/docker.sock:/var/run/docker.sock --network host'
+        }
     }
 
     options {
@@ -24,9 +33,18 @@ pipeline {
         // Bound from Jenkins credentials (Manage Jenkins > Credentials).
         // Use "Secret text" credentials so both this pipeline and the
         // consumer's use the exact same broker connection details.
+        // PACT_BROKER_BASE_URL should be http://localhost:9292 to match the
+        // broker started by the stage below.
         PACT_BROKER_BASE_URL = credentials('pact-broker-base-url')
         PACT_BROKER_USERNAME = credentials('pact-broker-username')
         PACT_BROKER_PASSWORD = credentials('pact-broker-password')
+
+        // Consumed by docker-compose.yml's postgres/pact-broker services.
+        // Only reachable from inside the broker's own docker network, so
+        // not treated as a secret like the PACT_BROKER_* creds above.
+        POSTGRES_DB = 'pact_broker'
+        POSTGRES_USER = 'pact_broker'
+        POSTGRES_PASSWORD = 'pact_broker'
 
         // Overrides Jenkins' auto-populated GIT_COMMIT (a full 40-char SHA)
         // with the short SHA, so the version recorded here matches the one
@@ -41,6 +59,35 @@ pipeline {
     }
 
     stages {
+        stage('Start Pact Broker') {
+            steps {
+                // node:20-bullseye has no Docker CLI baked in — install it
+                // so this container can drive the host daemon via the
+                // socket mounted in `agent` above.
+                sh '''
+                    apt-get update -qq
+                    apt-get install -y -qq curl
+                    curl -fsSL https://get.docker.com | sh
+                '''
+                // Shared with the UserWebClient job (same -p project name):
+                // if that job already started it (the usual trigger path),
+                // this is a no-op. Needed here too since this pipeline can
+                // also run standalone/on its own SCM trigger.
+                sh 'docker compose -p pact-broker up -d'
+                sh '''
+                    for i in $(seq 1 30); do
+                        curl -sf http://localhost:9292/diagnostic/status/heartbeat && exit 0
+                        sleep 2
+                    done
+                    echo "Pact Broker did not become healthy in time" >&2
+                    exit 1
+                '''
+            }
+            // No teardown here either — see the same note in the
+            // UserWebClient Jenkinsfile. The broker is shared, long-lived
+            // infra; stop it manually with `npm run broker:down`.
+        }
+
         stage('Install dependencies') {
             steps {
                 sh 'npm ci'
