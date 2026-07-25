@@ -4,12 +4,16 @@
 // to the Pact Broker by the UserWebClient consumer pipeline, then publishes
 // the verification result back to the broker (handled by the Verifier
 // options in tests/users-provider.pact.test.js — publishVerificationResult
-// is already true there).
+// is already true there). Then checks can-i-deploy and deploys itself.
 //
 // Triggered automatically at the end of the consumer (client) pipeline via
-// a `build job:` step — see Jenkinsfile in the user-web-client repo. Can
-// also be run standalone/on its own SCM trigger to re-verify against
-// whatever is currently on the broker.
+// a `build job: wait: true` step — see Jenkinsfile in the user-web-client
+// repo. That step blocks until this whole job finishes, so this job's
+// final SUCCESS/FAILURE (tests + can-i-deploy + deploy) is what gets
+// "returned" to the consumer pipeline: if anything here fails, the
+// consumer's build job: step throws and its own can-i-deploy/deploy stages
+// never run. Can also be run standalone/on its own SCM trigger to
+// re-verify against whatever is currently on the broker.
 pipeline {
     agent {
         docker {
@@ -118,6 +122,21 @@ pipeline {
                 always {
                     junit 'reports/junit.xml'
                 }
+            }
+        }
+
+        stage('Check can I deploy') {
+            steps {
+                sh 'npm run pact:can-i-deploy'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh '''
+                    echo "DEPLOYING PROVIDER SERVICE"
+                '''
+                sh 'npm run pact:record-deployment'
             }
         }
     }
