@@ -20,7 +20,11 @@ pipeline {
             // container on the host's network so it can then reach that
             // broker at localhost:9292 — Linux Docker hosts only, since
             // host networking isn't supported on Docker Desktop.
-            args '-v /var/run/docker.sock:/var/run/docker.sock --network host'
+            // -u root:root overrides the Docker Pipeline plugin's default
+            // of running as the Jenkins host user (uid:gid) — that user
+            // can't apt-get install the Docker CLI or reliably use the
+            // mounted socket, so this stage needs root inside the container.
+            args '-v /var/run/docker.sock:/var/run/docker.sock --network host -u root:root'
         }
     }
 
@@ -107,6 +111,18 @@ pipeline {
                     junit 'reports/junit.xml'
                 }
             }
+        }
+    }
+
+    post {
+        cleanup {
+            // Wipes node_modules etc. so the next build's `npm ci` starts
+            // from an empty workspace instead of fighting a tree left half
+            // torn-down by a prior failed/interrupted build — that
+            // half-torn-down state plus Docker Desktop's bind-mount sync
+            // lag is what produces ENOENT/ENOTEMPTY spam during npm ci.
+            // Requires the Workspace Cleanup plugin.
+            cleanWs()
         }
     }
 }
