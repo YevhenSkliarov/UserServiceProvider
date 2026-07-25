@@ -28,6 +28,14 @@ pipeline {
         }
     }
 
+    // Fires this pipeline on every push to this repo (e.g. a provider code
+    // change), independent of the consumer-triggered `build job:` step in
+    // the UserWebClient Jenkinsfile. Requires the GitHub plugin and a
+    // webhook on this repo pointed at Jenkins.
+    triggers {
+        githubPush()
+    }
+
     options {
         timestamps()
         disableConcurrentBuilds()
